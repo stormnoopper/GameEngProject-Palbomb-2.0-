@@ -24,6 +24,12 @@ float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 
+// Third-person camera parameters
+float cameraDistance = 4.0f;
+float cameraHeight = 2.0f;
+float cameraAngleX = 0.0f;  // Horizontal rotation around character (radians)
+float cameraAngleY = glm::radians(20.0f); // Vertical angle (pitch) in radians
+
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
@@ -59,7 +65,7 @@ int main()
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH,SCR_HEIGHT,"Character Animation Control - WASD to move, Space to jump, Shift to slide",NULL,NULL);
+    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH,SCR_HEIGHT,"Character Animation Control - A/D to turn, W to jump, S to slide",NULL,NULL);
     if(!window){
         std::cout<<"Failed to create GLFW window\n";
         glfwTerminate();
@@ -70,7 +76,7 @@ int main()
     glfwSetCursorPosCallback(window,mouse_callback);
     glfwSetScrollCallback(window,scroll_callback);
 
-    glfwSetInputMode(window,GLFW_CURSOR,GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window,GLFW_CURSOR,GLFW_CURSOR_NORMAL); // Cursor enabled since mouse control is disabled
 
     if(!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)){
         std::cout<<"Failed to initialize GLAD\n";
@@ -123,13 +129,25 @@ int main()
         processInput(window, animator, characterPos, characterRotation);
         animator.UpdateAnimation(deltaTime);
 
+        // Update third-person camera position
+        // Combine character rotation with camera angle for natural following
+        float totalAngle = characterRotation + cameraAngleX;
+        // Calculate camera position behind and above the character
+        float camX = characterPos.x - cameraDistance * sin(totalAngle) * cos(cameraAngleY);
+        float camY = characterPos.y + cameraHeight + cameraDistance * sin(cameraAngleY);
+        float camZ = characterPos.z - cameraDistance * cos(totalAngle) * cos(cameraAngleY);
+        
+        camera.Position = glm::vec3(camX, camY, camZ);
+        // Make camera look at the character (slightly above ground level)
+        glm::vec3 lookAtTarget = characterPos + glm::vec3(0.0f, cameraHeight * 0.5f, 0.0f);
+        glm::mat4 view = glm::lookAt(camera.Position, lookAtTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+
         glClearColor(0.1f,0.1f,0.1f,1.0f);
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
 
         ourShader.use();
 
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH/(float)SCR_HEIGHT, 0.1f,100.0f);
-        glm::mat4 view = camera.GetViewMatrix();
         ourShader.setMat4("projection",projection);
         ourShader.setMat4("view",view);
 
@@ -161,16 +179,6 @@ void processInput(GLFWwindow* window, Animator &animator, glm::vec3 &characterPo
     // Character movement controls
     float moveSpeed = 2.0f * deltaTime;
     
-    if(glfwGetKey(window,GLFW_KEY_W)==GLFW_PRESS) {
-        // Move forward
-        characterPos.z -= moveSpeed * cos(characterRotation);
-        characterPos.x -= moveSpeed * sin(characterRotation);
-    }
-    if(glfwGetKey(window,GLFW_KEY_S)==GLFW_PRESS) {
-        // Move backward  
-        characterPos.z += moveSpeed * cos(characterRotation);
-        characterPos.x += moveSpeed * sin(characterRotation);
-    }
     if(glfwGetKey(window,GLFW_KEY_A)==GLFW_PRESS) {
         // Turn left
         characterRotation += 2.0f * deltaTime;
@@ -182,37 +190,40 @@ void processInput(GLFWwindow* window, Animator &animator, glm::vec3 &characterPo
     
     AnimationState desiredState = AnimationState::Running;
 
-    if(glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
     {
         desiredState = AnimationState::Jumping;
     }
-    else if(glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS)
+    else if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
     {
         desiredState = AnimationState::Sliding;
     }
 
     SwitchAnimation(animator, desiredState);
-    
-    // Camera controls (keep original camera movement for better viewing)
-    if(glfwGetKey(window,GLFW_KEY_UP)==GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, deltaTime);
-    if(glfwGetKey(window,GLFW_KEY_DOWN)==GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
-    if(glfwGetKey(window,GLFW_KEY_LEFT)==GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, deltaTime);
-    if(glfwGetKey(window,GLFW_KEY_RIGHT)==GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, deltaTime);
 }
 
 void framebuffer_size_callback(GLFWwindow* window,int width,int height){ glViewport(0,0,width,height);}
 void mouse_callback(GLFWwindow* window,double xpos,double ypos){
-    if(firstMouse){ lastX=xpos; lastY=ypos; firstMouse=false; }
-    float xoffset=xpos-lastX;
-    float yoffset=lastY-ypos;
-    lastX=xpos; lastY=ypos;
-    camera.ProcessMouseMovement(xoffset,yoffset);
+    // Mouse control disabled - camera is locked
+    // if(firstMouse){ lastX=xpos; lastY=ypos; firstMouse=false; }
+    // float xoffset=xpos-lastX;
+    // float yoffset=lastY-ypos;
+    // lastX=xpos; lastY=ypos;
+    
+    // Third-person camera rotation around character - DISABLED
+    // cameraAngleX += glm::radians(xoffset * camera.MouseSensitivity);
+    // cameraAngleY += glm::radians(yoffset * camera.MouseSensitivity);
+    
+    // Constrain vertical angle
+    // if(cameraAngleY > glm::radians(80.0f)) cameraAngleY = glm::radians(80.0f);
+    // if(cameraAngleY < glm::radians(-20.0f)) cameraAngleY = glm::radians(-20.0f);
 }
-void scroll_callback(GLFWwindow* window,double xoffset,double yoffset){ camera.ProcessMouseScroll(yoffset);}
+void scroll_callback(GLFWwindow* window,double xoffset,double yoffset){ 
+    // Adjust camera distance with scroll wheel
+    cameraDistance -= yoffset * 0.5f;
+    if(cameraDistance < 2.0f) cameraDistance = 2.0f;
+    if(cameraDistance > 10.0f) cameraDistance = 10.0f;
+}
 
 void SwitchAnimation(Animator& animator, AnimationState newState)
 {
