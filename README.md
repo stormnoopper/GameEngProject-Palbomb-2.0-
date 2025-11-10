@@ -1,4 +1,4 @@
-# Game Engine Project - Palbomb 2.0
+# Game Engine Project - RunBoyRun
 
 โปรเจคเกม Endless Runner ที่ใช้ OpenGL สำหรับแสดงตัวละครพร้อม Skeletal Animation
 
